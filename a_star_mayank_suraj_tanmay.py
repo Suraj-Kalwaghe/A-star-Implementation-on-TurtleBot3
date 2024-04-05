@@ -1,46 +1,44 @@
-
 #!/usr/bin/env python3
 # Github repository:  https://github.com/MayankD409/A_star_algorithm_on_rigid_robot.git
 
 import pygame
 import numpy as np
 import time
-import heapq
 import math
 import os
 import cv2
 
 # Define a class to represent nodes in the search space
 class Node:
-    def __init__(self, x, y, parent,current_theta, change_theta,UL,UR, c2c, c2g, total_cost ):
+    def __init__(self, x, y, parent,theta,UL,UR, c2c, c2g, total_cost):
         self.x = x
         self.y = y
         self.parent = parent
-        self.current_theta = current_theta
-        self.change_theta = change_theta
+        self.theta = theta
         self.UL = UL
         self.UR = UR
         self.c2c = c2c
         self.c2g = c2g
-        self.total_cost = total_cost 
+        self.total_cost = total_cost
         
     def __lt__(self,other):
         return self.total_cost < other.total_cost
 
 # Define possible actions and associated cost increments
-def plot_curve(Xi, Yi, Thetai, UL, UR,c, plot, Nodes_list, Path_list, obs_space):
+def plot_curve(Xi, Yi, Thetai, UL, UR, Nodes_list, Path_list, obs_space):
+    '''
+    Xi, Yi,Thetai: Input point's coordinates
+    Xs, Ys: Start point coordinates for plot function
+    Xn, Yn, Thetan: End point coordintes
+    '''
     t = 0
-    r = 0.038
-    L = 0.354
+    r = 4
+    L = 16
     dt = 0.1
     cost = 0
     Xn = Xi
     Yn = Yi
     Thetan = 3.14 * Thetai / 180
-
-    # Xi, Yi,Thetai: Input point's coordinates
-    # Xs, Ys: Start point coordinates for plot function
-    # Xn, Yn, Thetan: End point coordintes
 
     while t < 1:
         t = t + dt
@@ -49,15 +47,18 @@ def plot_curve(Xi, Yi, Thetai, UL, UR,c, plot, Nodes_list, Path_list, obs_space)
         Xn += r*0.5 * (UL + UR) * math.cos(Thetan) * dt
         Yn += r*0.5 * (UL + UR) * math.sin(Thetan) * dt
         Thetan += (r / L) * (UR - UL) * dt
-        if  is_valid(Xn, Yn, obs_space):
+        
+        if is_valid(Xn, Yn, obs_space):
             c2g = math.dist((Xs, Ys), (Xn, Yn))
             cost = cost + c2g
             Nodes_list.append((Xn, Yn))
             Path_list.append((Xs, Ys))
         else:
             return None
+    
     Thetan = 180 * (Thetan) / 3.14
     return [Xn, Yn, Thetan, cost, Nodes_list, Path_list]
+
 
 # Function to check if a point is inside a rectangle
 def is_point_inside_rectangle(x, y, vertices):
@@ -67,35 +68,11 @@ def is_point_inside_rectangle(x, y, vertices):
     y_max = max(vertices[0][1], vertices[1][1], vertices[2][1], vertices[3][1])
     return x_min <= x <= x_max and y_min <= y <= y_max
 
-# Function to check if a point is inside a hexagon
-def is_point_inside_hexagon(x, y, center_x, center_y, side_length):
-    cx, cy = center_x, center_y
-    vertices = []
-    angle_deg = 60
-    angle_rad = math.radians(angle_deg)
-    for i in range(6):
-        px = cx + side_length * math.cos(angle_rad * i + math.radians(30))
-        py = cy + side_length * math.sin(angle_rad * i + math.radians(30))
-        vertices.append((px, py))
-    odd_nodes = False
-    j = 5
-    for i in range(6):
-        if (vertices[i][1] < y and vertices[j][1] >= y) or (vertices[j][1] < y and vertices[i][1] >= y):
-            if (vertices[i][0] + (y - vertices[i][1]) / (vertices[j][1] - vertices[i][1]) * (vertices[j][0] - vertices[i][0])) < x:
-                odd_nodes = not odd_nodes
-        j = i
-    return odd_nodes
-
-# Function to check if a point is inside a C-shaped block
-def is_point_inside_block(point, vertices):
-    odd_nodes = False
-    j = len(vertices) - 1
-    for i in range(len(vertices)):
-        if (vertices[i][1] < point[1] and vertices[j][1] >= point[1]) or (vertices[j][1] < point[1] and vertices[i][1] >= point[1]):
-            if (vertices[i][0] + (point[1] - vertices[i][1]) / (vertices[j][1] - vertices[i][1]) * (vertices[j][0] - vertices[i][0])) < point[0]:
-                odd_nodes = not odd_nodes
-        j = i
-    return odd_nodes
+# Function to check if a point is inside a Circle
+def is_point_inside_circle(x, y, center_x, center_y, diameter):
+    radius = diameter / 2.0  # Calculate the radius from the diameter
+    distance = math.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
+    return distance <= radius
 
 # Function to create configuration space with obstacles
 def Configuration_space(width, height, robot_radius, clearance):
@@ -104,32 +81,27 @@ def Configuration_space(width, height, robot_radius, clearance):
     for y in range(height):
         for x in range(width):
             # Creating buffer space for obstacles    
-            rectangle1_buffer_vts = [(50 - (robot_radius + clearance), 250), (87.5 + (robot_radius + clearance), 250), (87.5 + (robot_radius + clearance), 50 - (robot_radius + clearance)), (50 - (robot_radius + clearance), 50 - (robot_radius + clearance))]
-            rectangle2_buffer_vts = [(137.5 - (robot_radius + clearance), 200 + (robot_radius + clearance)), (175 + (robot_radius + clearance), 200 - (robot_radius + clearance)), (175 + (robot_radius + clearance), 0), (137.5 - (robot_radius + clearance), 0)]
-            cblock_buffer_vts = [(450 - (robot_radius + clearance), 225 + (robot_radius + clearance)), (450 - (robot_radius + clearance), 187.5 - (robot_radius + clearance)), (510 - (robot_radius + clearance), 187.5 - (robot_radius + clearance)), (510 - (robot_radius + clearance), 62.5 + (robot_radius + clearance)), (450 - (robot_radius + clearance), 62.5 + (robot_radius + clearance)), 
-                                 (450 - (robot_radius + clearance), 25 - (robot_radius + clearance)), (550 + (robot_radius + clearance), 25 - (robot_radius + clearance)), (550 + (robot_radius + clearance), 225 + (robot_radius + clearance))]
+            rectangle1_buffer_vts = [(150 - (robot_radius + clearance), 200), (175 + (robot_radius + clearance), 200), (175 + (robot_radius + clearance), 100 - (robot_radius + clearance)), (150 - (robot_radius + clearance), 100 - (robot_radius + clearance))]
+            rectangle2_buffer_vts = [(250 - (robot_radius + clearance), 100 + (robot_radius + clearance)), (275 + (robot_radius + clearance), 100 - (robot_radius + clearance)), (275 + (robot_radius + clearance), 0), (250 - (robot_radius + clearance), 0)]
 
             rect1_buffer = is_point_inside_rectangle(x,y, rectangle1_buffer_vts)
             rect2_buffer = is_point_inside_rectangle(x, y, rectangle2_buffer_vts)
-            hexa_buffer = is_point_inside_hexagon(x, y, 325, 125, 75 + (robot_radius + clearance))
-            cblock_buffer = is_point_inside_block((x, y), cblock_buffer_vts)
+            circ_buffer = is_point_inside_circle(x, y, 420, 120, 120 + 2*(robot_radius + clearance))
             
             # Setting buffer space constraints to obtain obstacle space
-            if cblock_buffer or rect1_buffer or rect2_buffer or hexa_buffer:
+            if rect1_buffer or rect2_buffer or circ_buffer:
                 obs_space[y, x] = 1
              
             # Plotting actual obstacle space using half-plane equations
-            rectangle1_vts = [(50, 250), (87.5, 250), (87.5, 50), (50, 50)]
-            rectangle2_vts = [(137.5, 200), (175, 200), (175, 0), (137.5, 0)]
-            cblock_vertices = [(450, 225), (450, 187.5), (510, 187.5), (510, 62.5), (450, 62.5), (450, 25), (550, 25), (550, 225)]
+            rectangle1_vts = [(150, 200), (175, 200), (175, 100), (150, 100)]
+            rectangle2_vts = [(250, 100), (275, 100), (275, 0), (250, 0)]
 
             rect1 = is_point_inside_rectangle(x, y, rectangle1_vts)
             rect2 = is_point_inside_rectangle(x, y, rectangle2_vts)
-            hexa = is_point_inside_hexagon(x, y, 325, 125, 75)
-            cblock = is_point_inside_block((x, y), cblock_vertices)
+            circ = is_point_inside_circle(x, y, 420, 120, 120)
 
             # Setting the constraints to obtain the obstacle space without buffer
-            if cblock or rect1 or rect2 or hexa:
+            if rect1 or rect2 or circ:
                 obs_space[y, x] = 2
                 
     # Adding clearance for walls
@@ -149,11 +121,15 @@ def Configuration_space(width, height, robot_radius, clearance):
 def is_valid(x, y, obs_space):
     height, width = obs_space.shape
     
+    # Convert x and y to integers to use them as indices
+    x = int(x)
+    y = int(y)
+    
     # Check if coordinates are within the boundaries of the obstacle space and not occupied by an obstacle
-    if x < 0 or x >= width or y < 0 or y >= height or obs_space[round(y)][round(x)] == 1 or obs_space[round(y)][round(x)] == 2:
+    if x < 0 or x >= width or y < 0 or y >= height or obs_space[y][x] == 1 or obs_space[y][x] == 2:
         return False
     
-    return obs_space[round(y), round(x)] == 0
+    return obs_space[y, x] == 0
 
 # Function to calculate Euclidean distance between two points
 def euclidean_distance(point1, point2):
@@ -161,37 +137,19 @@ def euclidean_distance(point1, point2):
 
 # Function to check if the goal node is reached
 def is_goal(present, goal):
-    dt = euclidean_distance((present.x, present.y), (goal.x, goal.y))             
-    if dt <= 1.5:
+    dt = math.dist((present.x, present.y), (goal.x, goal.y))             
+    if dt <= 10:
         return True
     else:
         return False
     
 # A* algorithm implementation
-def key(node):
-    key = 1022*node.x + 111*node.y 
-    return key
+def a_star(start_position, goal_position, rpm1, rpm2, obstacle_space):                       
+    if is_goal(start_position, goal_position):
+        return None, 1
 
-### Function to implement A star ########
-def Astar_algorithm(start_node, goal_node,rpm1,rpm2,r,clearance, obs_space):
-
-    if is_goal(start_node, goal_node):
-        return 1,None,None
-    
-    start_node = start_node
-    start_node_id = key(start_node)
-    goal_node = goal_node
-
-    Nodes_list = []
-    Path_list = []
-    
-    explored_nodes = {}
-    unexplored_nodes = {}
-    
-    unexplored_nodes[start_node_id] = start_node
-    
-    
-    priority_list = []
+    goal = goal_position
+    start = start_position
     
     moves = [[rpm1, 0], 
              [0, rpm1], 
@@ -201,59 +159,62 @@ def Astar_algorithm(start_node, goal_node,rpm1,rpm2,r,clearance, obs_space):
              [rpm2, rpm2], 
              [rpm1, rpm2],
              [rpm2, rpm1]]
+       
+    unexplored = {}  # Dictionary of all unexplored nodes
     
-    heapq.heappush(priority_list, [start_node.total_cost, start_node])
-
-    while (len(priority_list) != 0):
-
-        present_node = (heapq.heappop(priority_list))[1]
-        current_id = key(present_node)
-
-        if is_goal(present_node, goal_node):
-            goal_node.parent = present_node.parent
-            goal_node.total_cost = present_node.total_cost
+    start_coords = (start.x, start.y)  # Generating a unique key for identifying the node
+    unexplored[start_coords] = start
+    
+    explored = {}  # Dictionary of all explored nodes
+    Nodes_list = [] # Stores all nodes that have been traversed, for visualization purposes.
+    Path_list = []
+    visited = set()  # Set to keep track of visited coordinates
+    
+    while unexplored:
+        # Select the node with the lowest combined cost and heuristic estimate
+        begin = time.time()
+        present_coords = min(unexplored, key=lambda k: unexplored[k].total_cost)
+        present_node = unexplored.pop(present_coords)
+        
+        if is_goal(present_node, goal):
+            goal.parent = present_node.parent
+            goal.total_cost = present_node.total_cost
             print("Goal Node found")
             return 1,Nodes_list,Path_list
-        
-        if current_id in explored_nodes:  
-            continue
-        else:
-            explored_nodes[current_id] = present_node
-        
-        del unexplored_nodes[current_id]
-        
+
+        explored[present_coords] = present_node
 
         for move in moves:
-            X1 = plot_curve(present_node.x, present_node.y, present_node.current_theta, move[0], move[1],
-                            clearance, 0, Nodes_list, Path_list, obs_space)
-           
+            X1 = plot_curve(present_node.x, present_node.y, present_node.theta, move[0], move[1],
+                            Nodes_list, Path_list, obs_space)
             
             if (X1 != None):
                 angle = X1[2]
-                
+
                 theta_threshold = 15
                 x = (round(X1[0] * 10) / 10)
                 y = (round(X1[1] * 10) / 10)
                 th = (round(angle / theta_threshold) * theta_threshold)
-                ct = present_node.change_theta - th
+
+                c2g = math.dist((x, y), (goal.x, goal.y))  
+    
+                new_node = Node(x,y,present_node,th,move[0],move[1],present_node.c2c+X1[3],c2g,present_node.c2c+X1[3]+c2g)   
+                new_coords = (new_node.x, new_node.y)
+    
+                if not is_valid(new_node.x, new_node.y, obstacle_space) or new_coords in explored:
+                    continue
                 
-                c2g = math.dist((x,y), (goal_node.x, goal_node.y))
-                new_node = Node(x,y,present_node,th,ct,move[0],move[1],present_node.c2c+X1[3],c2g,present_node.c2c+X1[3]+c2g)
-
-                new_node_id = key(new_node)
-
-                if not is_valid(new_node.x, new_node.y,obs_space):
+                if new_coords in visited:
+                    # Skip adding the node if its coordinates have already been visited
                     continue
-                elif new_node_id in explored_nodes:
-                    continue
-                if new_node_id in unexplored_nodes:
-                    if new_node.total_cost < unexplored_nodes[new_node_id].total_cost:
-                        unexplored_nodes[new_node_id].total_cost = new_node.total_cost
-                        unexplored_nodes[new_node_id].parent = new_node
-                else:
-                    unexplored_nodes[new_node_id] = new_node
-                    heapq.heappush(priority_list, [ unexplored_nodes[new_node_id].total_cost, unexplored_nodes[new_node_id]])
-            
+                
+                if new_coords not in unexplored:
+                    unexplored[new_coords] = new_node
+                    visited.add(new_coords)  # Add the new coordinates to the visited set
+                elif new_node.cost < unexplored[new_coords].cost:
+                    unexplored[new_coords] = new_node
+        end = time.time()
+        print("Time taken for iteration:", end - begin, "seconds")
     return 0,Nodes_list,Path_list
 
 # Function to backtrack and generate shortest path
@@ -274,26 +235,6 @@ def backtrack(goal_node):
     
     return x_path, y_path
 
-# Function to draw a hexagon
-def draw_hexagon(screen, color, center_x, center_y, side_length):
-    vertices = []
-    angle_deg = 60
-    angle_rad = math.radians(angle_deg)
-    for i in range(6):
-        x = center_x + side_length * math.cos(angle_rad * i + math.radians(30))  # Adding 30 degrees to start with vertex up
-        y = center_y + side_length * math.sin(angle_rad * i + math.radians(30))
-        vertices.append((x, y))
-    pygame.draw.polygon(screen, color, vertices)
-
-# Function to draw a hexagon with padding
-def draw_padded_hexagon(screen, color, center_x, center_y, side_length, padding):
-    enlarged_side_length = side_length + padding
-    draw_hexagon(screen, color, center_x, center_y, enlarged_side_length)
-
-# Function to draw C obstacle
-def draw_C(screen, color):
-    vertices = [(450, 225), (450, 187.5), (510, 187.5), (510, 62.5), (450, 62.5), (450, 25), (550, 25), (550, 225)]
-    pygame.draw.polygon(screen, color, vertices)
 
 # Function to draw a vector
 def draw_vector(screen, color, start, end):
@@ -310,12 +251,11 @@ def plot_path(start_node, goal_node, x_path, y_path, Nodes_list, Path_list, clea
     DARK_GREY = (100, 100, 100)
 
     padding = clearance
-    center_x, center_y = 325, 125
-    side_length = 75
+    center_x, center_y = 420, 120
 
     # Initialize Pygame and plot the map
     pygame.init()
-    screen = pygame.display.set_mode((600, 250))
+    screen = pygame.display.set_mode((600, 200))
     clock = pygame.time.Clock()
     if not os.path.exists("frames"):
         os.makedirs("frames")
@@ -327,38 +267,35 @@ def plot_path(start_node, goal_node, x_path, y_path, Nodes_list, Path_list, clea
             if event.type == pygame.QUIT:
                 running = False
         screen.fill(LIGHT_GREY)
-        padding_rect = pygame.Rect(padding, padding, 600 - 2 * padding, 250 - 2 * padding)
-        pygame.draw.rect(screen, WHITE, padding_rect)
-        draw_padded_hexagon(screen, LIGHT_GREY, center_x, center_y, side_length, padding)
-        draw_hexagon(screen, DARK_GREY, center_x, center_y, side_length)
-        cblock_vertices = [(450 - (clearance), 225 + (clearance)), (450 - (clearance), 187.5 - (clearance)),
-                           (510 - (clearance), 187.5 - (clearance)), (510 - (clearance), 62.5 + (clearance)),
-                           (450 - (clearance), 62.5 + (clearance)),
-                           (450 - (clearance), 25 - (clearance)), (550 + (clearance), 25 - (clearance)),
-                           (550 + (clearance), 225 + (clearance))]
-        pygame.draw.polygon(screen, LIGHT_GREY, cblock_vertices)
-        draw_C(screen, DARK_GREY)
-        pygame.draw.rect(screen, LIGHT_GREY, pygame.Rect(50 - clearance, 0, 37.5 + 2 * clearance,
-                                                         200 + clearance))  # Rectangle1 Clearance
-        pygame.draw.rect(screen, LIGHT_GREY, pygame.Rect(137.5 - clearance, 50 - clearance, 37.5 + 2 * clearance,
-                                                         200 + clearance))  # Rectangle2 Clearance
-        pygame.draw.rect(screen, DARK_GREY, pygame.Rect(50, 0, 37.5, 200))  # Rectangle1 Obstacle
-        pygame.draw.rect(screen, DARK_GREY, pygame.Rect(137.5, 50, 37.5, 200))  # Rectangle2 Obstacle
-        pygame.draw.rect(screen, RED, (start_node.x, 250 - start_node.y, 4, 4))  # Invert y-axis for start node
-        pygame.draw.rect(screen, RED, (goal_node.x, 250 - goal_node.y, 4, 4))  # Invert y-axis for goal node
+        padding_rect = pygame.Rect(padding, padding, 600 - 2 * padding, 200 - 2 * padding) # Background Canvas
+        pygame.draw.rect(screen, WHITE, padding_rect) # Original Canvas
+        pygame.draw.circle(screen, LIGHT_GREY, (center_x, 200-center_y), 60 + padding)
+        pygame.draw.circle(screen, DARK_GREY, (center_x, 200-center_y), 60)
+        pygame.draw.rect(screen, LIGHT_GREY, pygame.Rect(150 - clearance, 0, 25 + 2 * clearance,
+                                                         100 + clearance))  # Rectangle1 Clearance
+        pygame.draw.rect(screen, LIGHT_GREY, pygame.Rect(250 - clearance, 100 - clearance, 25 + 2 * clearance,
+                                                         100 + clearance))  # Rectangle2 Clearance
+        pygame.draw.rect(screen, DARK_GREY, pygame.Rect(150, 0, 25, 100))  # Rectangle1 Obstacle
+        pygame.draw.rect(screen, DARK_GREY, pygame.Rect(250, 100, 25, 100))  # Rectangle2 Obstacle
+        pygame.draw.rect(screen, RED, (start_node.x, 200 - start_node.y, 3, 3))  # Invert y-axis for start node
+        pygame.draw.rect(screen, RED, (goal_node.x, 200 - goal_node.y, 3, 3))  # Invert y-axis for goal node
+
+
         for i in range(len(Nodes_list) - 1):
             present_node = Nodes_list[i]
             parent_node = Path_list[i]
-            start = (present_node[0], 250 - present_node[1])  # Invert y-axis for present node
-            end = (parent_node[0], 250 - parent_node[1])  # Invert y-axis for parent node
+            start = (present_node[0], 200 - present_node[1])  # Invert y-axis for present node
+            end = (parent_node[0], 200 - parent_node[1])  # Invert y-axis for parent node
             pygame.draw.line(screen, BLUE, start, end, width=1)
-            pygame.draw.circle(screen, (0, 255, 0), start, 2)
+            pygame.draw.circle(screen, (0, 255, 0), start, -1)
             frame_count += 1
             if frame_count % 250 == 0:  # Save frame every 100th frame
                 pygame.image.save(screen, os.path.join("frames", f"frame_{frame_count}.png"))
             pygame.display.update()
+
+        
         for i in range(len(x_path) - 1):
-            pygame.draw.line(screen, RED, (x_path[i], 250 - y_path[i]), (x_path[i + 1], 250 - y_path[i + 1]), width=4)
+            pygame.draw.line(screen, RED, (x_path[i], 200 - y_path[i]), (x_path[i + 1], 200 - y_path[i + 1]), width=4)
             pygame.image.save(screen, os.path.join("frames", f"frame_{frame_count}.png"))
             frame_count += 1
             pygame.display.update()
@@ -372,7 +309,7 @@ def frames_to_video(frames_dir, output_video):
     frames = [img for img in os.listdir(frames_dir) if img.endswith(".png")]
     frames.sort(key=lambda x: int(x.split("_")[1].split(".")[0]))  # Sort frames by frame number
     frame = cv2.imread(os.path.join(frames_dir, frames[0]))
-    height, width, layers = frame.shape
+    height, width, _ = frame.shape
     # print("Creating Videowriter")
     video = cv2.VideoWriter(output_video, cv2.VideoWriter_fourcc(*'mp4v'), 35, (width, height))
     print("Writing Video")
@@ -385,34 +322,29 @@ def frames_to_video(frames_dir, output_video):
 
 if __name__ == '__main__':
     width = 600
-    height = 250
-    RPM1, RPM2 = 50, 50
+    height = 200
+    RPM1, RPM2 = 4,8
     c2g = 0
     
     # Taking start and end node coordinates as input from the user
     CLEARANCE = int(input("Enter the desired CLEARANCE: "))
     robot_radius = 1
-    robot_step_size = 2
     print("Minimum x and y values will be addition of clearance (of wall) and robot radius:",CLEARANCE+robot_radius)
     start_input_x = input("Enter the Start X: ")
     start_input_y = input("Enter the Start Y: ")
     start_theta = int(input("Enter the Theta_Start: "))
 
-    start_x = int(start_input_x)
-    start_y = int(start_input_y)
+    start_x = float(start_input_x)
+    start_y = float(start_input_y)
 
     end_input_x = input("Enter the End X: ")
     end_input_y = input("Enter the End Y: ")
     
-    end_x = int(end_input_x)
-    end_y = int(end_input_y)
+    end_x = float(end_input_x)
+    end_y = float(end_input_y)
     
     if start_theta % 30 != 0:
         print("Please enter valid theta values. Theta should be a multiple of 30 degrees.")
-        exit()
-
-    if robot_step_size < 1 or robot_step_size > 10:
-        print("Please enter a valid step size between 1 to 10 inclusive.")
         exit()
 
     print("Setting up Configuration space. Wait a few seconds....")
@@ -420,14 +352,14 @@ if __name__ == '__main__':
     # Define start and goal nodes
     c2g = math.dist((start_x,start_y), (end_x, end_y))
     total_cost =  c2g
-    start_node = Node(start_x, start_y,-1,start_theta,0,0,0,0,c2g,total_cost)
-    goal_node = Node(end_x, end_y, -1,0,0,0,0,c2g,0,total_cost)
+    start_node = Node(start_x, start_y,-1,start_theta,0,0,0,c2g,total_cost)
+    goal_node = Node(end_x, end_y, -1,0,0,0,c2g,0,total_cost)
     save_dir = "frames"
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-
+    print("Setup Done!!!")
     timer_begin = time.time()
-    flag,Nodes_list,Path_list = Astar_algorithm(start_node, goal_node,RPM1,RPM2,robot_radius,CLEARANCE, obs_space)
+    flag,Nodes_list,Path_list = a_star(start_node, goal_node,RPM1,RPM2, obs_space)
     timer_end = time.time()
     print("Time taken to explore:", timer_end - timer_begin, "seconds")
 
