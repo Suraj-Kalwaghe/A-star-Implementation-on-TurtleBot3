@@ -25,7 +25,7 @@ class Node:
         return self.total_cost < other.total_cost
 
 # Define possible actions and associated cost increments
-def plot_curve(Xi, Yi, Thetai, UL, UR, Nodes_list, Path_list, clearance, robot_radius):
+def cost_fn(Xi, Yi, Thetai, UL, UR, Nodes_list, Path_list, clearance, robot_radius):
     '''
     Xi, Yi,Thetai: Input point's coordinates
     Xs, Ys: Start point coordinates for plot function
@@ -147,7 +147,7 @@ def a_star(start_position, goal_position, rpm1, rpm2, clearance, robot_radius):
         explored_coords.add(present_coords)
         
         for move in moves:
-            X1 = plot_curve(present_node.x, present_node.y, present_node.theta, move[0], move[1],
+            X1 = cost_fn(present_node.x, present_node.y, present_node.theta, move[0], move[1],
                             Nodes_list, Path_list, clearance, robot_radius)
             
             if X1 is not None:
@@ -170,7 +170,7 @@ def a_star(start_position, goal_position, rpm1, rpm2, clearance, robot_radius):
         
         # Explore nodes within a radius of 10 units from the current node
         for coord in unexplored.copy():
-            if math.dist(coord, present_coords) <= (robot_radius + clearance):
+            if math.dist(coord, present_coords) <= (robot_radius):
                 explored_coords.add(coord)
                 del unexplored[coord]
 
@@ -279,36 +279,38 @@ def frames_to_video(frames_dir, output_video):
     cv2.destroyAllWindows()
     video.release()
 
+def scale_coordinates(input_x, input_y, canvas_width, canvas_height):
+    # Scale coordinates to fit within canvas_width, canvas_height
+    scaled_x = (input_x / canvas_width) * 600
+    scaled_y = (input_y / canvas_height) * 200
+    return scaled_x, scaled_y
 
 if __name__ == '__main__':
-    width = 600
-    height = 200
-    RPM1, RPM2 = 4,8
-    c2g = 0
+    large_canvas_width = 6000
+    large_canvas_height = 2000
+    robot_radius = 10
     
     # Taking start and end node coordinates as input from the user
-    CLEARANCE = int(input("Enter the desired CLEARANCE: "))
-    robot_radius = 10
-    print("Minimum x and y values will be addition of clearance (of wall) and robot radius:",CLEARANCE+robot_radius)
-    start_input_x = input("Enter the Star*/t X: ")
-    start_input_y = input("Enter the Start Y: ")
+    CLEARANCE = int(input("Enter the desired CLEARANCE (1-10): "))
+    RPM1 = int(input("Enter the desired left_wheel RPM: "))
+    RPM2 = int(input("Enter the desired right_wheel RPM: "))
+
+    print("Minimum x and y values will be addition of clearance (of wall) and robot radius:",(CLEARANCE+robot_radius)*10)
+    start_input_x = int(input("Enter the Start X: "))
+    start_input_y = int(input("Enter the Start Y: "))
     start_theta = int(input("Enter the Theta_Start: "))
-
-    start_x = float(start_input_x)
-    start_y = float(start_input_y)
-
-    end_input_x = input("Enter the End X: ")
-    end_input_y = input("Enter the End Y: ")
+    end_input_x = int(input("Enter the End X: "))
+    end_input_y = int(input("Enter the End Y: "))
     
-    end_x = float(end_input_x)
-    end_y = float(end_input_y)
+    start_x, start_y = scale_coordinates(start_input_x, start_input_y, large_canvas_width, large_canvas_height)
+    end_x, end_y = scale_coordinates(end_input_x, end_input_y, large_canvas_width, large_canvas_height)
     
     if start_theta % 30 != 0:
         print("Please enter valid theta values. Theta should be a multiple of 30 degrees.")
         exit()
 
-    print("Setting up Configuration space. Wait a few seconds....")
-    # obs_space = Configuration_space(width, height, robot_radius, CLEARANCE)
+    print("Finding the optimal path......!!!!")
+
     # Define start and goal nodes
     c2g = math.dist((start_x,start_y), (end_x, end_y))
     total_cost =  c2g
@@ -317,7 +319,7 @@ if __name__ == '__main__':
     save_dir = "frames"
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-    print("Setup Done!!!")
+
     timer_begin = time.time()
     flag,Nodes_list,Path_list = a_star(start_node, goal_node,RPM1,RPM2, CLEARANCE, robot_radius)
     timer_end = time.time()
