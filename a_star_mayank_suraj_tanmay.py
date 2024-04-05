@@ -25,7 +25,7 @@ class Node:
         return self.total_cost < other.total_cost
 
 # Define possible actions and associated cost increments
-def plot_curve(Xi, Yi, Thetai, UL, UR, Nodes_list, Path_list, obs_space):
+def plot_curve(Xi, Yi, Thetai, UL, UR, Nodes_list, Path_list, clearance, robot_radius):
     '''
     Xi, Yi,Thetai: Input point's coordinates
     Xs, Ys: Start point coordinates for plot function
@@ -48,7 +48,7 @@ def plot_curve(Xi, Yi, Thetai, UL, UR, Nodes_list, Path_list, obs_space):
         Yn += r*0.5 * (UL + UR) * math.sin(Thetan) * dt
         Thetan += (r / L) * (UR - UL) * dt
         
-        if is_valid(Xn, Yn, obs_space):
+        if is_valid(Xn, Yn, robot_radius, clearance):
             c2g = math.dist((Xs, Ys), (Xn, Yn))
             cost = cost + c2g
             Nodes_list.append((Xn, Yn))
@@ -75,61 +75,21 @@ def is_point_inside_circle(x, y, center_x, center_y, diameter):
     return distance <= radius
 
 # Function to create configuration space with obstacles
-def Configuration_space(width, height, robot_radius, clearance):
-    obs_space = np.full((height, width), 0)
+def is_valid(x, y, robot_radius, clearance):
+
+    # Creating buffer space for obstacles    
+    rectangle1_buffer_vts = [(150 - (robot_radius + clearance), 200), (175 + (robot_radius + clearance), 200), (175 + (robot_radius + clearance), 100 - (robot_radius + clearance)), (150 - (robot_radius + clearance), 100 - (robot_radius + clearance))]
+    rectangle2_buffer_vts = [(250 - (robot_radius + clearance), 100 + (robot_radius + clearance)), (275 + (robot_radius + clearance), 100 - (robot_radius + clearance)), (275 + (robot_radius + clearance), 0), (250 - (robot_radius + clearance), 0)]
+
+    rect1_buffer = is_point_inside_rectangle(x,y, rectangle1_buffer_vts)
+    rect2_buffer = is_point_inside_rectangle(x, y, rectangle2_buffer_vts)
+    circ_buffer = is_point_inside_circle(x, y, 420, 120, 120 + 2*(robot_radius + clearance))
     
-    for y in range(height):
-        for x in range(width):
-            # Creating buffer space for obstacles    
-            rectangle1_buffer_vts = [(150 - (robot_radius + clearance), 200), (175 + (robot_radius + clearance), 200), (175 + (robot_radius + clearance), 100 - (robot_radius + clearance)), (150 - (robot_radius + clearance), 100 - (robot_radius + clearance))]
-            rectangle2_buffer_vts = [(250 - (robot_radius + clearance), 100 + (robot_radius + clearance)), (275 + (robot_radius + clearance), 100 - (robot_radius + clearance)), (275 + (robot_radius + clearance), 0), (250 - (robot_radius + clearance), 0)]
-
-            rect1_buffer = is_point_inside_rectangle(x,y, rectangle1_buffer_vts)
-            rect2_buffer = is_point_inside_rectangle(x, y, rectangle2_buffer_vts)
-            circ_buffer = is_point_inside_circle(x, y, 420, 120, 120 + 2*(robot_radius + clearance))
-            
-            # Setting buffer space constraints to obtain obstacle space
-            if rect1_buffer or rect2_buffer or circ_buffer:
-                obs_space[y, x] = 1
-             
-            # Plotting actual obstacle space using half-plane equations
-            rectangle1_vts = [(150, 200), (175, 200), (175, 100), (150, 100)]
-            rectangle2_vts = [(250, 100), (275, 100), (275, 0), (250, 0)]
-
-            rect1 = is_point_inside_rectangle(x, y, rectangle1_vts)
-            rect2 = is_point_inside_rectangle(x, y, rectangle2_vts)
-            circ = is_point_inside_circle(x, y, 420, 120, 120)
-
-            # Setting the constraints to obtain the obstacle space without buffer
-            if rect1 or rect2 or circ:
-                obs_space[y, x] = 2
-                
-    # Adding clearance for walls
-    for i in range(height):
-        for j in range(3 + (robot_radius + clearance)):
-            obs_space[i][j] = 1
-            obs_space[i][width - j - 1] = 1
-
-    for i in range(width):
-        for j in range(3 + (robot_radius + clearance)):  
-            obs_space[j][i] = 1
-            obs_space[height - j - 1][i] = 1 
-
-    return obs_space
-
-# Function to check if a move is valid
-def is_valid(x, y, obs_space):
-    height, width = obs_space.shape
-    
-    # Convert x and y to integers to use them as indices
-    x = int(x)
-    y = int(y)
-    
-    # Check if coordinates are within the boundaries of the obstacle space and not occupied by an obstacle
-    if x < 0 or x >= width or y < 0 or y >= height or obs_space[y][x] == 1 or obs_space[y][x] == 2:
+    # Setting buffer space constraints to obtain obstacle space
+    if rect1_buffer or rect2_buffer or circ_buffer:
         return False
-    
-    return obs_space[y, x] == 0
+
+    return True
 
 # Function to calculate Euclidean distance between two points
 def euclidean_distance(point1, point2):
@@ -144,7 +104,7 @@ def is_goal(present, goal):
         return False
     
 # A* algorithm implementation
-def a_star(start_position, goal_position, rpm1, rpm2, obstacle_space):                       
+def a_star(start_position, goal_position, rpm1, rpm2, clearance, robot_radius):                       
     if is_goal(start_position, goal_position):
         return None, 1
 
@@ -186,7 +146,7 @@ def a_star(start_position, goal_position, rpm1, rpm2, obstacle_space):
 
         for move in moves:
             X1 = plot_curve(present_node.x, present_node.y, present_node.theta, move[0], move[1],
-                            Nodes_list, Path_list, obs_space)
+                            Nodes_list, Path_list, clearance, robot_radius)
             
             if (X1 != None):
                 angle = X1[2]
@@ -201,7 +161,7 @@ def a_star(start_position, goal_position, rpm1, rpm2, obstacle_space):
                 new_node = Node(x,y,present_node,th,move[0],move[1],present_node.c2c+X1[3],c2g,present_node.c2c+X1[3]+c2g)   
                 new_coords = (new_node.x, new_node.y)
     
-                if not is_valid(new_node.x, new_node.y, obstacle_space) or new_coords in explored:
+                if not is_valid(new_node.x, new_node.y, robot_radius, clearance) or new_coords in explored:
                     continue
                 
                 if new_coords in visited:
@@ -348,7 +308,7 @@ if __name__ == '__main__':
         exit()
 
     print("Setting up Configuration space. Wait a few seconds....")
-    obs_space = Configuration_space(width, height, robot_radius, CLEARANCE)
+    # obs_space = Configuration_space(width, height, robot_radius, CLEARANCE)
     # Define start and goal nodes
     c2g = math.dist((start_x,start_y), (end_x, end_y))
     total_cost =  c2g
@@ -359,7 +319,7 @@ if __name__ == '__main__':
         os.makedirs(save_dir)
     print("Setup Done!!!")
     timer_begin = time.time()
-    flag,Nodes_list,Path_list = a_star(start_node, goal_node,RPM1,RPM2, obs_space)
+    flag,Nodes_list,Path_list = a_star(start_node, goal_node,RPM1,RPM2, CLEARANCE, robot_radius)
     timer_end = time.time()
     print("Time taken to explore:", timer_end - timer_begin, "seconds")
 
