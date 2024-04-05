@@ -88,6 +88,10 @@ def is_valid(x, y, robot_radius, clearance):
     # Setting buffer space constraints to obtain obstacle space
     if rect1_buffer or rect2_buffer or circ_buffer:
         return False
+    
+    # Adding check if obstacle is in walls
+    if x <= (robot_radius + clearance) or y >= 200 - (robot_radius + clearance) or x >= 600 - (robot_radius + clearance) or y <= (robot_radius + clearance):
+        return False
 
     return True
 
@@ -98,13 +102,13 @@ def euclidean_distance(point1, point2):
 # Function to check if the goal node is reached
 def is_goal(present, goal):
     dt = math.dist((present.x, present.y), (goal.x, goal.y))             
-    if dt <= 10:
+    if dt <= 15:
         return True
     else:
         return False
     
 # A* algorithm implementation
-def a_star(start_position, goal_position, rpm1, rpm2, clearance, robot_radius):                       
+def a_star(start_position, goal_position, rpm1, rpm2, clearance, robot_radius):
     if is_goal(start_position, goal_position):
         return None, 1
 
@@ -121,18 +125,16 @@ def a_star(start_position, goal_position, rpm1, rpm2, clearance, robot_radius):
              [rpm2, rpm1]]
        
     unexplored = {}  # Dictionary of all unexplored nodes
+    explored_coords = set()  # Set of explored coordinates
     
     start_coords = (start.x, start.y)  # Generating a unique key for identifying the node
     unexplored[start_coords] = start
     
-    explored = {}  # Dictionary of all explored nodes
-    Nodes_list = [] # Stores all nodes that have been traversed, for visualization purposes.
+    Nodes_list = []  # Stores all nodes that have been traversed, for visualization purposes.
     Path_list = []
-    visited = set()  # Set to keep track of visited coordinates
     
     while unexplored:
         # Select the node with the lowest combined cost and heuristic estimate
-        begin = time.time()
         present_coords = min(unexplored, key=lambda k: unexplored[k].total_cost)
         present_node = unexplored.pop(present_coords)
         
@@ -140,42 +142,40 @@ def a_star(start_position, goal_position, rpm1, rpm2, clearance, robot_radius):
             goal.parent = present_node.parent
             goal.total_cost = present_node.total_cost
             print("Goal Node found")
-            return 1,Nodes_list,Path_list
+            return 1, Nodes_list, Path_list
 
-        explored[present_coords] = present_node
-
+        explored_coords.add(present_coords)
+        
         for move in moves:
             X1 = plot_curve(present_node.x, present_node.y, present_node.theta, move[0], move[1],
                             Nodes_list, Path_list, clearance, robot_radius)
             
-            if (X1 != None):
+            if X1 is not None:
                 angle = X1[2]
-
-                theta_threshold = 15
                 x = (round(X1[0] * 10) / 10)
                 y = (round(X1[1] * 10) / 10)
-                th = (round(angle / theta_threshold) * theta_threshold)
+                th = (round(angle / 15) * 15)
 
-                c2g = math.dist((x, y), (goal.x, goal.y))  
-    
-                new_node = Node(x,y,present_node,th,move[0],move[1],present_node.c2c+X1[3],c2g,present_node.c2c+X1[3]+c2g)   
+                c2g = math.dist((x, y), (goal.x, goal.y))
+                new_node = Node(x, y, present_node, th, move[0], move[1], present_node.c2c + X1[3], c2g, present_node.c2c + X1[3] + c2g)
                 new_coords = (new_node.x, new_node.y)
     
-                if not is_valid(new_node.x, new_node.y, robot_radius, clearance) or new_coords in explored:
-                    continue
-                
-                if new_coords in visited:
-                    # Skip adding the node if its coordinates have already been visited
+                if not is_valid(new_node.x, new_node.y, robot_radius, clearance) or new_coords in explored_coords:
                     continue
                 
                 if new_coords not in unexplored:
                     unexplored[new_coords] = new_node
-                    visited.add(new_coords)  # Add the new coordinates to the visited set
-                elif new_node.cost < unexplored[new_coords].cost:
+                elif new_node.total_cost < unexplored[new_coords].total_cost:
                     unexplored[new_coords] = new_node
-        end = time.time()
-        print("Time taken for iteration:", end - begin, "seconds")
-    return 0,Nodes_list,Path_list
+        
+        # Explore nodes within a radius of 10 units from the current node
+        for coord in unexplored.copy():
+            if math.dist(coord, present_coords) <= (robot_radius + clearance):
+                explored_coords.add(coord)
+                del unexplored[coord]
+
+    return 0, Nodes_list, Path_list
+
 
 # Function to backtrack and generate shortest path
 def backtrack(goal_node):  
@@ -288,9 +288,9 @@ if __name__ == '__main__':
     
     # Taking start and end node coordinates as input from the user
     CLEARANCE = int(input("Enter the desired CLEARANCE: "))
-    robot_radius = 1
+    robot_radius = 10
     print("Minimum x and y values will be addition of clearance (of wall) and robot radius:",CLEARANCE+robot_radius)
-    start_input_x = input("Enter the Start X: ")
+    start_input_x = input("Enter the Star*/t X: ")
     start_input_y = input("Enter the Start Y: ")
     start_theta = int(input("Enter the Theta_Start: "))
 
