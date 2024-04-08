@@ -10,22 +10,22 @@ import cv2
 
 # Define a class to represent nodes in the search space
 class Node:
-    def __init__(self, x, y, parent,theta,UL,UR, c2c, c2g, total_cost):
+    def __init__(self, x, y, parent,theta,rpm_left,rpm_right, c2c, c2g, cst):
         self.x = x
         self.y = y
         self.parent = parent
         self.theta = theta
-        self.UL = UL
-        self.UR = UR
+        self.rpm_left = rpm_left
+        self.rpm_right = rpm_right
         self.c2c = c2c
         self.c2g = c2g
-        self.total_cost = total_cost
+        self.cst = cst
         
     def __lt__(self,other):
-        return self.total_cost < other.total_cost
+        return self.cst < other.cst
 
 # Define possible actions and associated cost increments
-def cost_fn(Xi, Yi, Thetai, UL, UR, Nodes_list, Path_list, clearance, robot_radius):
+def cost_fn(Xi, Yi, Thetai, UL, UR, present_nodes, parent_nodes, clearance, robot_radius):
     '''
     Xi, Yi,Thetai: Input point's coordinates
     Xs, Ys: Start point coordinates for plot function
@@ -51,13 +51,13 @@ def cost_fn(Xi, Yi, Thetai, UL, UR, Nodes_list, Path_list, clearance, robot_radi
         if is_valid(Xn, Yn, robot_radius, clearance):
             c2g = math.dist((Xs, Ys), (Xn, Yn))
             cost = cost + c2g
-            Nodes_list.append((Xn, Yn))
-            Path_list.append((Xs, Ys))
+            present_nodes.append((Xn, Yn))
+            parent_nodes.append((Xs, Ys))
         else:
             return None
     
     Thetan = 180 * (Thetan) / 3.14
-    return [Xn, Yn, Thetan, cost, Nodes_list, Path_list]
+    return [Xn, Yn, Thetan, cost, present_nodes, parent_nodes]
 
 
 # Function to check if a point is inside a rectangle
@@ -130,34 +130,30 @@ def a_star(start_position, goal_position, rpm1, rpm2, clearance, robot_radius):
     start_coords = (start.x, start.y)  # Generating a unique key for identifying the node
     unexplored[start_coords] = start
     
-    Nodes_list = []  # Stores all nodes that have been traversed, for visualization purposes.
-    Path_list = []
+    present_nodes = []  # Stores all nodes that have been traversed, for visualization purposes.
+    parent_nodes = []
     
     while unexplored:
         # Select the node with the lowest combined cost and heuristic estimate
-        present_coords = min(unexplored, key=lambda k: unexplored[k].total_cost)
+        present_coords = min(unexplored, key=lambda k: unexplored[k].cst)
         present_node = unexplored.pop(present_coords)
         
         if is_goal(present_node, goal):
             goal.parent = present_node.parent
-            goal.total_cost = present_node.total_cost
+            goal.cst = present_node.cst
             print("Goal Node found")
-            return 1, Nodes_list, Path_list
+            return 1, present_nodes, parent_nodes
 
         explored_coords.add(present_coords)
         
         for move in moves:
             X1 = cost_fn(present_node.x, present_node.y, present_node.theta, move[0], move[1],
-                            Nodes_list, Path_list, clearance, robot_radius)
+                            present_nodes, parent_nodes, clearance, robot_radius)
             
             if X1 is not None:
-                angle = X1[2]
-                x = (round(X1[0] * 10) / 10)
-                y = (round(X1[1] * 10) / 10)
-                th = (round(angle / 15) * 15)
 
-                c2g = math.dist((x, y), (goal.x, goal.y))
-                new_node = Node(x, y, present_node, th, move[0], move[1], present_node.c2c + X1[3], c2g, present_node.c2c + X1[3] + c2g)
+                c2g = math.dist((X1[0], X1[1]), (goal.x, goal.y))
+                new_node = Node(X1[0], X1[1], present_node, X1[2], move[0], move[1], present_node.c2c + X1[3], c2g, present_node.c2c + X1[3] + c2g)
                 new_coords = (new_node.x, new_node.y)
     
                 if not is_valid(new_node.x, new_node.y, robot_radius, clearance) or new_coords in explored_coords:
@@ -165,7 +161,7 @@ def a_star(start_position, goal_position, rpm1, rpm2, clearance, robot_radius):
                 
                 if new_coords not in unexplored:
                     unexplored[new_coords] = new_node
-                elif new_node.total_cost < unexplored[new_coords].total_cost:
+                elif new_node.cst < unexplored[new_coords].cst:
                     unexplored[new_coords] = new_node
         
         # Explore nodes within a radius of 10 units from the current node
@@ -174,13 +170,13 @@ def a_star(start_position, goal_position, rpm1, rpm2, clearance, robot_radius):
                 explored_coords.add(coord)
                 if is_goal(unexplored[coord], goal):  # Check if this node is the goal node
                     goal.parent = present_node.parent
-                    goal.total_cost = present_node.total_cost + unexplored[coord].c2c
+                    goal.cst = present_node.cst + unexplored[coord].c2c
                     print("Goal Node found")
-                    return 1, Nodes_list, Path_list
+                    return 1, present_nodes, parent_nodes
                 del unexplored[coord]
 
 
-    return 0, Nodes_list, Path_list
+    return 0, present_nodes, parent_nodes
 
 
 # Function to backtrack and generate shortest path
@@ -209,7 +205,7 @@ def draw_vector(screen, color, start, end):
     pygame.draw.circle(screen, BLUE, end, 2)
 
 # Function to plot the path
-def plot_path(start_node, goal_node, x_path, y_path, Nodes_list, Path_list, clearance, frame_rate):
+def plot_path(start_node, goal_node, x_path, y_path, present_nodes, parent_nodes, clearance, frame_rate):
     BLUE = (0, 0, 255)
     RED = (255, 0, 0)
     WHITE = (255, 255, 255)
@@ -228,7 +224,7 @@ def plot_path(start_node, goal_node, x_path, y_path, Nodes_list, Path_list, clea
 
     frame_count = 0
     running = True
-    while running and frame_count < len(Nodes_list):
+    while running and frame_count < len(present_nodes):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -247,9 +243,9 @@ def plot_path(start_node, goal_node, x_path, y_path, Nodes_list, Path_list, clea
         pygame.draw.rect(screen, RED, (goal_node.x, 200 - goal_node.y, 3, 3))  # Invert y-axis for goal node
 
 
-        for i in range(len(Nodes_list) - 1):
-            present_node = Nodes_list[i]
-            parent_node = Path_list[i]
+        for i in range(len(present_nodes) - 1):
+            present_node = present_nodes[i]
+            parent_node = parent_nodes[i]
             start = (present_node[0], 200 - present_node[1])  # Invert y-axis for present node
             end = (parent_node[0], 200 - parent_node[1])  # Invert y-axis for parent node
             pygame.draw.line(screen, BLUE, start, end, width=1)
@@ -315,26 +311,25 @@ if __name__ == '__main__':
         exit()
 
     print("Finding the optimal path......!!!!")
-
-    # Define start and goal nodes
     c2g = math.dist((start_x,start_y), (end_x, end_y))
-    total_cost =  c2g
-    start_node = Node(start_x, start_y,-1,start_theta,0,0,0,c2g,total_cost)
-    goal_node = Node(end_x, end_y, -1,0,0,0,c2g,0,total_cost)
+    cst =  c2g
+    # Define start and goal nodes
+    start_node = Node(start_x, start_y,-1,start_theta,0,0,0,c2g,cst)
+    goal_node = Node(end_x, end_y, -1,0,0,0,c2g,0,cst)
     save_dir = "frames"
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
     timer_begin = time.time()
-    flag,Nodes_list,Path_list = a_star(start_node, goal_node,RPM1,RPM2, CLEARANCE, robot_radius)
+    flag,present_nodes,parent_nodes = a_star(start_node, goal_node,RPM1,RPM2, CLEARANCE, robot_radius)
     timer_end = time.time()
     print("Time taken to explore:", timer_end - timer_begin, "seconds")
 
     if flag:
         x_path, y_path = backtrack(goal_node)
-        optimal_cost = goal_node.total_cost  # Cost of the optimal path
+        optimal_cost = goal_node.cst  # Cost of the optimal path
         print("Optimal path cost:", optimal_cost)
-        plot_path(start_node, goal_node, x_path, y_path, Nodes_list, Path_list, CLEARANCE, frame_rate=30)
+        plot_path(start_node, goal_node, x_path, y_path, present_nodes, parent_nodes, CLEARANCE, frame_rate=30)
         output_video = "output_video.mp4"
         print("Generating Video")
         frames_to_video(save_dir, output_video)
