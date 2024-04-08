@@ -4,7 +4,6 @@
 import pygame
 import numpy as np
 import time
-import heapq
 import math
 import os
 import cv2
@@ -76,42 +75,25 @@ def is_point_inside_circle(x, y, center_x, center_y, diameter):
     return distance <= radius
 
 # Function to create configuration space with obstacles
-# def is_valid(x, y, robot_radius, clearance):
+def is_valid(x, y, robot_radius, clearance):
 
-#     # Creating buffer space for obstacles    
-#     rectangle1_buffer_vts = [(150 - (robot_radius + clearance), 200), (175 + (robot_radius + clearance), 200), (175 + (robot_radius + clearance), 100 - (robot_radius + clearance)), (150 - (robot_radius + clearance), 100 - (robot_radius + clearance))]
-#     rectangle2_buffer_vts = [(250 - (robot_radius + clearance), 100 + (robot_radius + clearance)), (275 + (robot_radius + clearance), 100 - (robot_radius + clearance)), (275 + (robot_radius + clearance), 0), (250 - (robot_radius + clearance), 0)]
+    # Creating buffer space for obstacles    
+    rectangle1_buffer_vts = [(150 - (robot_radius + clearance), 200), (175 + (robot_radius + clearance), 200), (175 + (robot_radius + clearance), 100 - (robot_radius + clearance)), (150 - (robot_radius + clearance), 100 - (robot_radius + clearance))]
+    rectangle2_buffer_vts = [(250 - (robot_radius + clearance), 100 + (robot_radius + clearance)), (275 + (robot_radius + clearance), 100 - (robot_radius + clearance)), (275 + (robot_radius + clearance), 0), (250 - (robot_radius + clearance), 0)]
 
-#     rect1_buffer = is_point_inside_rectangle(x,y, rectangle1_buffer_vts)
-#     rect2_buffer = is_point_inside_rectangle(x, y, rectangle2_buffer_vts)
-#     circ_buffer = is_point_inside_circle(x, y, 420, 120, 120 + 2*(robot_radius + clearance))
+    rect1_buffer = is_point_inside_rectangle(x,y, rectangle1_buffer_vts)
+    rect2_buffer = is_point_inside_rectangle(x, y, rectangle2_buffer_vts)
+    circ_buffer = is_point_inside_circle(x, y, 420, 120, 120 + 2*(robot_radius + clearance))
     
-#     # Setting buffer space constraints to obtain obstacle space
-#     if rect1_buffer or rect2_buffer or circ_buffer:
-#         return False
-    
-#     # Adding check if obstacle is in walls
-#     if x <= (robot_radius + clearance) or y >= 200 - (robot_radius + clearance) or x >= 600 - (robot_radius + clearance) or y <= (robot_radius + clearance):
-#         return False
-
-#     return True
-
-def is_valid(x, y, radius, clearance):
-    total_space = radius + clearance
-
-    obstacle1 = ((np.square(x - 420)) + (np.square(y - 120)) <= np.square(60 + total_space))
-    obstacle2 = (x >= 150 - total_space) and (x <= 175 + total_space) and (y >= 100 - total_space)
-    obstacle3 = (x >= 250 - total_space) and (x <= 275 + total_space) and (y <= 100 + total_space)
- 
-    border1 = (x <= 0 + total_space)     
-    border2 = (x >= 600 - total_space)
-    border3 = (y <= 0 + total_space)
-    border4 = (y >= 200 - total_space)
-
-    if obstacle1 or obstacle2 or obstacle3 or border1 or border2 or border3 or border4:
+    # Setting buffer space constraints to obtain obstacle space
+    if rect1_buffer or rect2_buffer or circ_buffer:
         return False
-    else:
-        return True
+    
+    # Adding check if obstacle is in walls
+    if x <= (robot_radius + clearance) or y >= 200 - (robot_radius + clearance) or x >= 600 - (robot_radius + clearance) or y <= (robot_radius + clearance):
+        return False
+
+    return True
 
 # Function to calculate Euclidean distance between two points
 def euclidean_distance(point1, point2):
@@ -126,105 +108,13 @@ def is_goal(present, goal):
         return False
     
 # A* algorithm implementation
-# def a_star(start_position, goal_position, rpm1, rpm2, clearance, robot_radius):
-#     if is_goal(start_position, goal_position):
-#         return None, 1
+def a_star(start_position, goal_position, rpm1, rpm2, clearance, robot_radius):
+    if is_goal(start_position, goal_position):
+        return None, 1
 
-#     goal = goal_position
-#     start = start_position
+    goal = goal_position
+    start = start_position
     
-#     moves = [[rpm1, 0], 
-#              [0, rpm1], 
-#              [rpm1, rpm1], 
-#              [0, rpm2], 
-#              [rpm2, 0], 
-#              [rpm2, rpm2], 
-#              [rpm1, rpm2],
-#              [rpm2, rpm1]]
-       
-#     unexplored = {}  # Dictionary of all unexplored nodes
-#     explored_coords = set()  # Set of explored coordinates
-    
-#     start_coords = (start.x, start.y)  # Generating a unique key for identifying the node
-#     unexplored[start_coords] = start
-    
-#     Nodes_list = []  # Stores all nodes that have been traversed, for visualization purposes.
-#     Path_list = []
-    
-#     while unexplored:
-#         # Select the node with the lowest combined cost and heuristic estimate
-#         present_coords = min(unexplored, key=lambda k: unexplored[k].total_cost)
-#         present_node = unexplored.pop(present_coords)
-        
-#         if is_goal(present_node, goal):
-#             goal.parent = present_node.parent
-#             goal.total_cost = present_node.total_cost
-#             print("Goal Node found")
-#             return 1, Nodes_list, Path_list
-
-#         explored_coords.add(present_coords)
-        
-#         for move in moves:
-#             X1 = cost_fn(present_node.x, present_node.y, present_node.theta, move[0], move[1],
-#                             Nodes_list, Path_list, clearance, robot_radius)
-            
-#             if X1 is not None:
-#                 angle = X1[2]
-#                 x = (round(X1[0] * 10) / 10)
-#                 y = (round(X1[1] * 10) / 10)
-#                 th = (round(angle / 15) * 15)
-
-#                 c2g = math.dist((x, y), (goal.x, goal.y))
-#                 new_node = Node(x, y, present_node, th, move[0], move[1], present_node.c2c + X1[3], c2g, present_node.c2c + X1[3] + c2g)
-#                 new_coords = (new_node.x, new_node.y)
-    
-#                 if not is_valid(new_node.x, new_node.y, robot_radius, clearance) or new_coords in explored_coords:
-#                     continue
-                
-#                 if new_coords not in unexplored:
-#                     unexplored[new_coords] = new_node
-#                 elif new_node.total_cost < unexplored[new_coords].total_cost:
-#                     unexplored[new_coords] = new_node
-        
-#         # Explore nodes within a radius of 10 units from the current node
-#         # for coord in unexplored.copy():
-#         #     if math.dist(coord, present_coords) <= (robot_radius):
-#         #         if is_goal(unexplored[coord], goal):
-#         #             node = unexplored[coord]
-#         #             goal.parent = node.parent
-#         #             goal.total_cost = node.total_cost
-#         #             print("Goal Node found")
-#         #             return 1, Nodes_list, Path_list
-#         #         explored_coords.add(coord)
-#         #         del unexplored[coord]
-
-#     return 0, Nodes_list, Path_list
-
-def key(node):
-    key = 1000 * node.x + 111 * node.y
-    return key
-
-def a_star(start_node, goal_node, rpm1, rpm2, clearance, radius):
-
-    # Check if the goal node is reached 
-    if is_goal(start_node, goal_node):
-        return 1, None, None
-    
-    start_node = start_node
-    start_node_id = key(start_node)
-    goal_node = goal_node
-
-    Nodes_list = []  # List to store all the explored nodes
-    Path_list = []  # List to store the final path from start to goal node
-
-    closed_node = {}  # Dictionary to store all the closed nodes
-    open_node = {}  # Dictionary to store all the open nodes
-    
-    open_node[start_node_id] = start_node   # Add the start node to the open nodes dictionary
-
-    priority_list = []  # Priority queue to store nodes based on their total cost
-    
-    # All the possible moves of the robot
     moves = [[rpm1, 0], 
              [0, rpm1], 
              [rpm1, rpm1], 
@@ -233,70 +123,65 @@ def a_star(start_node, goal_node, rpm1, rpm2, clearance, radius):
              [rpm2, rpm2], 
              [rpm1, rpm2],
              [rpm2, rpm1]]
-
-    # Push the start node into the priority queue with its total cost
-    heapq.heappush(priority_list, [start_node.total_cost, start_node])
-
-    while (len(priority_list) != 0):
-
-        # Pop the node with the minimum cost from the priority queue
-        current_nodes = (heapq.heappop(priority_list))[1]
-        current_id = key(current_nodes)
-
-        # Check if the popped node is the goal node
-        if is_goal(current_nodes, goal_node):
-            goal_node.parent = current_nodes.parent
-            goal_node.total_cost = current_nodes.total_cost
+       
+    unexplored = {}  # Dictionary of all unexplored nodes
+    explored_coords = set()  # Set of explored coordinates
+    
+    start_coords = (start.x, start.y)  # Generating a unique key for identifying the node
+    unexplored[start_coords] = start
+    
+    Nodes_list = []  # Stores all nodes that have been traversed, for visualization purposes.
+    Path_list = []
+    
+    while unexplored:
+        # Select the node with the lowest combined cost and heuristic estimate
+        present_coords = min(unexplored, key=lambda k: unexplored[k].total_cost)
+        present_node = unexplored.pop(present_coords)
+        
+        if is_goal(present_node, goal):
+            goal.parent = present_node.parent
+            goal.total_cost = present_node.total_cost
             print("Goal Node found")
             return 1, Nodes_list, Path_list
+
+        explored_coords.add(present_coords)
         
-        # Add the popped node to the closed nodes dictionary
-        if current_id in closed_node:  
-            continue
-        else:
-            closed_node[current_id] = current_nodes
-        
-        del open_node[current_id]
-        
-        # Loop through all the possible moves
         for move in moves:
-            action = cost_fn(current_nodes.x, current_nodes.y, current_nodes.theta, move[0], move[1],
+            X1 = cost_fn(present_node.x, present_node.y, present_node.theta, move[0], move[1],
                             Nodes_list, Path_list, clearance, robot_radius)
-           
-            # Check if the move is valid
-            if (action != None):
-                angle = action[2]
-                
-                # Round off the coordinates and the angle to nearest integer
-                theta_lim = 30
-                x = (round(action[0] * 10) / 10)
-                y = (round(action[1] * 10) / 10)
-                theta = (round(angle / theta_lim) * theta_lim)
-                
-                # Calculate the new orientation and the cost to move to the new node
-                c2g = math.dist((x,y), (goal_node.x, goal_node.y))
-                new_node = Node(x, y, current_nodes, theta, move[0], move[1], current_nodes.c2c+action[3], c2g, current_nodes.c2c+action[3]+c2g)
-
-                new_node_id = key(new_node)
-                
-                # Check if the new node is valid and has not already been visited
-                if not is_valid(new_node.x, new_node.y, radius, clearance):
-                    continue
-                elif new_node_id in closed_node:
-                    continue
-
-                # Update the node information if it already exists in the open list
-                if new_node_id in open_node:
-                    if new_node.total_cost < open_node[new_node_id].total_cost:
-                        open_node[new_node_id].total_cost = new_node.total_cost
-                        open_node[new_node_id].parent = new_node
-
-                # Add the new node to the open list if it doesn't already exist        
-                else:
-                    open_node[new_node_id] = new_node
-                    heapq.heappush(priority_list, [ open_node[new_node_id].total_cost, open_node[new_node_id]])
             
+            if X1 is not None:
+                angle = X1[2]
+                x = (round(X1[0] * 10) / 10)
+                y = (round(X1[1] * 10) / 10)
+                th = (round(angle / 15) * 15)
+
+                c2g = math.dist((x, y), (goal.x, goal.y))
+                new_node = Node(x, y, present_node, th, move[0], move[1], present_node.c2c + X1[3], c2g, present_node.c2c + X1[3] + c2g)
+                new_coords = (new_node.x, new_node.y)
+    
+                if not is_valid(new_node.x, new_node.y, robot_radius, clearance) or new_coords in explored_coords:
+                    continue
+                
+                if new_coords not in unexplored:
+                    unexplored[new_coords] = new_node
+                elif new_node.total_cost < unexplored[new_coords].total_cost:
+                    unexplored[new_coords] = new_node
+        
+        # Explore nodes within a radius of 10 units from the current node
+        for coord in unexplored.copy():
+            if math.dist(coord, present_coords) <= 10:  # Check if within radius of 10 units
+                explored_coords.add(coord)
+                if is_goal(unexplored[coord], goal):  # Check if this node is the goal node
+                    goal.parent = present_node.parent
+                    goal.total_cost = present_node.total_cost + unexplored[coord].c2c
+                    print("Goal Node found")
+                    return 1, Nodes_list, Path_list
+                del unexplored[coord]
+
+
     return 0, Nodes_list, Path_list
+
 
 # Function to backtrack and generate shortest path
 def backtrack(goal_node):  
@@ -441,7 +326,7 @@ if __name__ == '__main__':
         os.makedirs(save_dir)
 
     timer_begin = time.time()
-    flag,Nodes_list,Path_list = a_star(start_node, goal_node,RPM1,RPM2, CLEARANCE, 22)
+    flag,Nodes_list,Path_list = a_star(start_node, goal_node,RPM1,RPM2, CLEARANCE, robot_radius)
     timer_end = time.time()
     print("Time taken to explore:", timer_end - timer_begin, "seconds")
 
